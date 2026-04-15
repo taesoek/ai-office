@@ -555,4 +555,240 @@ html, body, #root {
   background: #fff;
 }
 
+.generating-badge {
+  font-size: 11px;
+  color: #c084fc;
+  font-style: italic;
+  margin-top: 6px;
+  animation: blink 1s infinite;
+}
+
+.preview-container {
+  border: 1px solid #3d2d60;
+  border-radius: 8px;
+  overflow: hidden;
+  margin: 8px 0;
+}
+
+.preview-label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 10px;
+  background: #1f1a30;
+  font-size: 10px;
+  color: #c084fc;
+  font-weight: 600;
+}
+
+.preview-expand-btn {
+  background: none;
+  border: 1px solid #3d2d60;
+  color: #9d8abf;
+  font-size: 10px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all .15s;
+}
+
+.preview-expand-btn:hover {
+  background: #3d2d60;
+  color: #e2d9f3;
+}
+
+.html-preview {
+  width: 100%;
+  height: 220px;
+  border: none;
+  background: #fff;
+  display: block;
+}
+
+.preview-fullscreen-btn {
+  margin-top: 6px;
+  margin-right: 6px;
+  padding: 4px 10px;
+  background: transparent;
+  border: 1px solid #7c3aed;
+  color: #a78bfa;
+  border-radius: 5px;
+  font-size: 10px;
+  cursor: pointer;
+  transition: all .15s;
+}
+
+.preview-fullscreen-btn:hover {
+  background: #7c3aed;
+  color: #fff;
+}
+
+.dialog-resize-handle {
+  height: 6px;
+  background: transparent;
+  cursor: ns-resize;
+  flex-shrink: 0;
+  border-top: 2px solid #7c3aed;
+  transition: background .15s;
+  width: 100%;
+}
+
+.dialog-resize-handle:hover {
+  background: #3d2d60;
+}
+
+.fullscreen-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,.75);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.fullscreen-modal {
+  width: 90vw;
+  height: 90vh;
+  background: #1a1528;
+  border-radius: 12px;
+  border: 1px solid #3d2d60;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.fullscreen-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 16px;
+  background: #13101f;
+  border-bottom: 1px solid #2d2540;
+  font-size: 13px;
+  color: #c084fc;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.fullscreen-close {
+  background: none;
+  border: 1px solid #3d2d60;
+  color: #9d8abf;
+  font-size: 12px;
+  padding: 4px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all .15s;
+}
+
+.fullscreen-close:hover {
+  background: #3d2d60;
+  color: #e2d9f3;
+}
+
+.fullscreen-iframe {
+  flex: 1;
+  border: none;
+  background: #fff;
+  width: 100%;
+}
+
+.code-block {
+  margin: 8px 0;
+  border: 1px solid #2d2540;
+  border-radius: 8px;
+  overflow: hidden;
+  font-family: 'Consolas', 'Monaco', monospace;
+}
+
+.code-block-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 12px;
+  background: #1a1528;
+  border-bottom: 1px solid #2d2540;
+}
+
+.code-lang {
+  font-size: 10px;
+  color: #c084fc;
+  font-weight: 600;
+  letter-spacing: .05em;
+}
+
+.code-copy-btn {
+  background: none;
+  border: 1px solid #3d2d60;
+  color: #9d8abf;
+  font-size: 10px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all .15s;
+}
+
+.code-copy-btn:hover {
+  background: #3d2d60;
+  color: #e2d9f3;
+}
+
+.code-content {
+  padding: 12px;
+  background: #0d0b17;
+  overflow-x: auto;
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.6;
+  color: #c8b8e8;
+  white-space: pre;
+}
+
+.code-content code {
+  font-family: 'Consolas', 'Monaco', monospace;
+}
+
+.quick-copy-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: #1a1528;
+  border-top: 1px solid #3d2d60;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+}
+
+.quick-copy-label {
+  font-size: 11px;
+  color: #9d8abf;
+  flex-shrink: 0;
+}
+
+.quick-copy-btns {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.quick-copy-btn {
+  background: #2d2050;
+  color: #c084fc;
+  border: 1px solid #3d2d60;
+  border-radius: 6px;
+  padding: 4px 12px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all .15s;
+  white-space: nowrap;
+}
+
+.quick-copy-btn:hover {
+  background: #7c3aed;
+  color: #fff;
+  border-color: #7c3aed;
+}
+
 .save-btn:hover { background: #4ade80; color: #0f0c1a; }
