@@ -10,5 +10,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
   offStream: () => {
     ipcRenderer.removeAllListeners('agent-stream')
+  },
+  pmDistribute: (pmNickname: string, userRequest: string, agents: any[], projectNote: string) =>
+    ipcRenderer.invoke('pm-distribute', pmNickname, userRequest, agents, projectNote),
+  runAgentTask: (agentId: string, agentNickname: string, agentSpecialty: string, task: string, projectNote: string) =>
+    ipcRenderer.invoke('run-agent-task', agentId, agentNickname, agentSpecialty, task, projectNote),
+  onStreamTask: (callback: (nickname: string, text: string) => void) => {
+    ipcRenderer.on('agent-stream-task', (_event, nickname, text) => callback(nickname, text))
+  },
+  offStreamTask: () => {
+    ipcRenderer.removeAllListeners('agent-stream-task')
   }
 })

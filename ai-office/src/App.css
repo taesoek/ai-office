@@ -791,4 +791,61 @@ html, body, #root {
   border-color: #7c3aed;
 }
 
+.auto-mode-btn {
+  width: 36px;
+  height: 36px;
+  flex-shrink: 0;
+  background: #1a1528;
+  border: 1px solid #3d2d60;
+  border-radius: 6px;
+  font-size: 16px;
+  cursor: pointer;
+  transition: all .15s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.auto-mode-btn:hover { border-color: #7c3aed; }
+.auto-mode-btn.active { background: #2d1f5e; border-color: #c084fc; }
+.auto-mode-btn:disabled { opacity: .4; cursor: not-allowed; }
+
+.distribution-panel {
+  background: #13101f;
+  border-top: 1px solid #2d2540;
+  border-bottom: 1px solid #2d2540;
+  padding: 8px 14px;
+  flex-shrink: 0;
+}
+
+.distribution-title {
+  font-size: 11px;
+  font-weight: 600;
+  color: #c084fc;
+  margin-bottom: 6px;
+}
+
+.distribution-tasks {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.distribution-task {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  padding: 3px 6px;
+  border-radius: 4px;
+}
+
+.distribution-task.pending { color: #6b5a8a; }
+.distribution-task.working { color: #fbbf24; background: #2a1f00; }
+.distribution-task.done { color: #4ade80; }
+
+.dist-status { flex-shrink: 0; }
+.dist-nickname { font-weight: 600; flex-shrink: 0; min-width: 60px; color: inherit; }
+.dist-task { opacity: .8; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
 .save-btn:hover { background: #4ade80; color: #0f0c1a; }

@@ -35,6 +35,7 @@ type Template = typeof AGENT_TEMPLATES[0]
 type HiredAgent = Template & { nickname: string }
 type Msg = { role: 'user' | 'assistant'; content: string }
 type AgentState = { history: Msg[]; input: string; loading: boolean }
+type DistTask = { nickname: string; task: string; status: 'pending' | 'working' | 'done' }
 
 function extractCode(text: string): { code: string; ext: string; lang: string } | null {
   const patterns = [
@@ -231,6 +232,9 @@ export default function App() {
   const [fullScreenHtml, setFullScreenHtml] = useState<string | null>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
   const isResizing = useRef(false)
+  const [autoMode, setAutoMode] = useState(false)
+  const [isDistributing, setIsDistributing] = useState(false)
+  const [distributionLog, setDistributionLog] = useState<DistTask[]>([])
 
   const st = activeAgent ? states[activeAgent.nickname] : null
 
@@ -339,6 +343,127 @@ export default function App() {
     }
     window.addEventListener('mousemove', onMove)
     window.addEventListener('mouseup', onUp)
+  }
+
+  const distributeTask = async () => {
+    if (!activeAgent || activeAgent.id !== 'pm') return
+    const userRequest = st?.input.trim()
+    if (!userRequest) return
+
+    const otherAgents = hiredAgents.filter(a => a.id !== 'pm')
+    if (otherAgents.length === 0) {
+      alert('PM 외 다른 에이전트를 먼저 고용해주세요!')
+      return
+    }
+
+    setIsDistributing(true)
+    setDistributionLog([])
+
+    // PM 채팅에 사용자 메시지 + 분석 중 메시지 추가
+    const pmNickname = activeAgent.nickname
+    setStates(prev => ({
+      ...prev,
+      [pmNickname]: {
+        ...prev[pmNickname],
+        history: [...prev[pmNickname].history,
+          { role: 'user', content: `[자동 분배 요청] ${userRequest}` },
+          { role: 'assistant', content: '🤖 팀원들에게 태스크를 배분하고 있습니다...' }
+        ],
+        input: '',
+        loading: true
+      }
+    }))
+
+    const result = await (window as any).electronAPI.pmDistribute(
+      pmNickname, userRequest, otherAgents, projectNote
+    )
+
+    if (!result.ok) {
+      setStates(prev => ({
+        ...prev,
+        [pmNickname]: {
+          ...prev[pmNickname],
+          history: [...prev[pmNickname].history,
+            { role: 'assistant', content: `❌ 분배 실패: ${result.error}` }
+          ],
+          loading: false
+        }
+      }))
+      setIsDistributing(false)
+      return
+    }
+
+    // PM 브리핑 업데이트
+    const pmSummary = `📋 태스크 분배 완료!\n\n${result.pmSummary}\n\n` +
+      result.tasks.map((t: any, i: number) => `${i + 1}. ${t.agentNickname} → ${t.task}`).join('\n')
+
+    setStates(prev => {
+      const h = [...prev[pmNickname].history]
+      h[h.length - 1] = { role: 'assistant', content: pmSummary }
+      return { ...prev, [pmNickname]: { ...prev[pmNickname], history: h, loading: false } }
+    })
+
+    setProjectNote(prev => prev
+      ? `${prev}\n\n[PM ${pmNickname} 자동 분배]\n${result.pmSummary}`
+      : `[PM ${pmNickname} 자동 분배]\n${result.pmSummary}`)
+
+    // 분배 로그 초기화
+    setDistributionLog(result.tasks.map((t: any) => ({
+      nickname: t.agentNickname, task: t.task, status: 'pending' as const
+    })))
+
+    // 스트리밍 리스너 등록
+    ;(window as any).electronAPI.offStreamTask()
+    ;(window as any).electronAPI.onStreamTask((nickname: string, chunk: string) => {
+      setStates(prev => {
+        const s = prev[nickname]
+        if (!s) return prev
+        const h = [...s.history]
+        const last = h[h.length - 1]
+        if (last?.role === 'assistant') {
+          h[h.length - 1] = { ...last, content: last.content + chunk }
+        }
+        return { ...prev, [nickname]: { ...s, history: h } }
+      })
+    })
+
+    // 각 에이전트 순차 실행
+    for (const task of result.tasks) {
+      const agent = hiredAgents.find(a => a.nickname === task.agentNickname)
+      if (!agent) continue
+
+      setDistributionLog(prev => prev.map(d =>
+        d.nickname === task.agentNickname ? { ...d, status: 'working' as const } : d
+      ))
+
+      setStates(prev => ({
+        ...prev,
+        [task.agentNickname]: {
+          ...(prev[task.agentNickname] || { history: [], input: '', loading: false }),
+          history: [...(prev[task.agentNickname]?.history || []),
+            { role: 'user', content: `[PM 배정 태스크] ${task.task}` },
+            { role: 'assistant', content: '' }
+          ],
+          loading: true
+        }
+      }))
+
+      await (window as any).electronAPI.runAgentTask(
+        agent.id, agent.nickname, agent.specialty, task.task, projectNote
+      )
+
+      setStates(prev => ({
+        ...prev,
+        [task.agentNickname]: { ...prev[task.agentNickname], loading: false }
+      }))
+
+      setDistributionLog(prev => prev.map(d =>
+        d.nickname === task.agentNickname ? { ...d, status: 'done' as const } : d
+      ))
+    }
+
+    ;(window as any).electronAPI.offStreamTask()
+    setIsDistributing(false)
   }
 
   // 고용 화면
@@ -514,6 +639,24 @@ export default function App() {
             </div>
           )}
 
+          {/* 자동 분배 진행 패널 */}
+          {distributionLog.length > 0 && (
+            <div className="distribution-panel">
+              <div className="distribution-title">🤖 자동 분배 진행 상황</div>
+              <div className="distribution-tasks">
+                {distributionLog.map((d, i) => (
+                  <div key={i} className={`distribution-task ${d.status}`}>
+                    <span className="dist-status">
+                      {d.status === 'pending' ? '⏸' : d.status === 'working' ? '⚙️' : '✅'}
+                    </span>
+                    <span className="dist-nickname">{d.nickname}</span>
+                    <span className="dist-task">{d.task}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* 리사이즈 핸들 */}
           <div className="dialog-resize-handle" onMouseDown={startResize} />
 
@@ -592,17 +735,41 @@ export default function App() {
                     return <QuickCopyBar content={lastMsg.content} lang="" />
                   })()}
                   <div className="dialog-input-row">
+                    {activeAgent.id === 'pm' && (
+                      <button
+                        className={`auto-mode-btn ${autoMode ? 'active' : ''}`}
+                        onClick={() => setAutoMode(!autoMode)}
+                        disabled={isDistributing}
+                        title={autoMode ? '자동 분배 모드 ON' : '수동 모드'}
+                      >
+                        {autoMode ? '🤖' : '👤'}
+                      </button>
+                    )}
                     <input className="dialog-input"
                       value={st?.input ?? ''}
                       onChange={e => setStates(prev => ({
                         ...prev,
                         [activeAgent.nickname]: { ...prev[activeAgent.nickname], input: e.target.value }
                       }))}
-                      onKeyDown={e => e.key === 'Enter' && sendMessage()}
-                      placeholder={`${activeAgent.nickname}에게 지시하기...`}
+                      onKeyDown={e => {
+                        if (e.key !== 'Enter') return
+                        if (activeAgent.id === 'pm' && autoMode) distributeTask()
+                        else sendMessage()
+                      }}
+                      placeholder={
+                        activeAgent.id === 'pm' && autoMode
+                          ? '🤖 명령하면 PM이 팀 전체에 자동 배분합니다...'
+                          : `${activeAgent.nickname}에게 지시하기...`
+                      }
+                      disabled={isDistributing}
                     />
-                    <button className="dialog-btn" onClick={sendMessage} disabled={st?.loading}>
-                      ▶ 전송
+                    <button className="dialog-btn"
+                      onClick={() => {
+                        if (activeAgent.id === 'pm' && autoMode) distributeTask()
+                        else sendMessage()
+                      }}
+                      disabled={st?.loading || isDistributing}>
+                      {isDistributing ? '⏳' : '▶ 전송'}
                     </button>
                   </div>
                 </div>

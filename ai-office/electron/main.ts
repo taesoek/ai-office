@@ -173,6 +173,75 @@ ipcMain.handle('ask-agent', async (event, agentId, agentName, agentRole, message
   }
 })
 
+ipcMain.handle('pm-distribute', async (_event, pmNickname, userRequest, agents, projectNote) => {
+  try {
+    const agentList = agents.map((a: any) => `- ${a.nickname} (${a.name}, 전문: ${a.specialty})`).join('\n')
+    const contextSection = projectNote ? `\n\n[프로젝트 컨텍스트]\n${projectNote}` : ''
+
+    const response = await client.messages.create({
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 1024,
+      system: `당신은 PM "${pmNickname}"입니다. 사용자 요청을 분석해 팀원들에게 태스크를 배분하세요.
+
+현재 팀원:
+${agentList}${contextSection}
+
+반드시 아래 JSON 형식으로만 응답하세요. 다른 텍스트 없이 JSON만:
+{
+  "pmSummary": "PM이 사용자에게 하는 브리핑 (2-3문장)",
+  "tasks": [
+    {
+      "agentNickname": "팀원 닉네임 (위 목록에 있는 이름 그대로)",
+      "task": "해당 팀원에게 배정할 구체적인 태스크"
+    }
+  ]
+}`,
+      messages: [{ role: 'user', content: userRequest }]
+    })
+
+    const text = response.content[0].type === 'text' ? response.content[0].text : ''
+    const jsonMatch = text.match(/\{[\s\S]*\}/)
+    if (!jsonMatch) return { ok: false, error: 'JSON 파싱 실패', raw: text }
+
+    const parsed = JSON.parse(jsonMatch[0])
+    return { ok: true, pmSummary: parsed.pmSummary, tasks: parsed.tasks }
+  } catch (e: any) {
+    return { ok: false, error: e.message }
+  }
+})
+
+ipcMain.handle('run-agent-task', async (event, agentId, agentNickname, agentSpecialty, task, projectNote) => {
+  try {
+    const contextSection = projectNote ? `\n\n[프로젝트 컨텍스트]\n${projectNote}` : ''
+    const rolePrompts: Record<string, string> = {
+      designer: `당신은 UI/UX 디자이너 "${agentNickname}"입니다. UI 요청 시 반드시 \`\`\`html 블록으로 간단한 목업을 제공하세요. 최대 50줄 이내로 간결하게.${contextSection}`,
+      frontend: `당신은 프론트엔드 개발자 "${agentNickname}"입니다. 코드는 반드시 \`\`\`tsx 또는 \`\`\`html 블록으로 완전하게 작성하세요.${contextSection}`,
+      backend: `당신은 백엔드 개발자 "${agentNickname}"입니다. 코드는 반드시 \`\`\`typescript 블록으로 작성하세요.${contextSection}`,
+    }
+    const systemPrompt = rolePrompts[agentId] ||
+      `당신은 ${agentSpecialty} 전문가 "${agentNickname}"입니다. 전문 분야에 맞게 구체적으로 답변하세요. 줄바꿈을 적극 활용하세요.${contextSection}`
+
+    let fullText = ''
+    const stream = await client.messages.stream({
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 3000,
+      system: systemPrompt,
+      messages: [{ role: 'user', content: task }]
+    })
+
+    for await (const chunk of stream) {
+      if (chunk.type === 'content_block_delta' && chunk.delta.type === 'text_delta') {
+        fullText += chunk.delta.text
+        event.sender.send('agent-stream-task', agentNickname, chunk.delta.text)
+      }
+    }
+
+    return { ok: true, text: fullText }
+  } catch (e: any) {
+    return { ok: false, text: e.message }
+  }
+})
+
 ipcMain.handle('save-file', async (_event, content, defaultName) => {
   const { filePath } = await dialog.showSaveDialog({
     title: '결과물 저장',
