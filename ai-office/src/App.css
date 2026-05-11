@@ -849,3 +849,288 @@ html, body, #root {
 .dist-task { opacity: .8; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .save-btn:hover { background: #4ade80; color: #0f0c1a; }
+/* ─── 새 UI 요소 ─────────────────────────────────────────────── */
+
+.project-title-badge {
+  background: #1f0a3d;
+  border: 1px solid #7c3aed;
+  border-radius: 20px;
+  padding: 3px 12px;
+  font-size: 11px;
+  color: #c084fc;
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.titlebar-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.creating-badge {
+  background: #2d1f00;
+  border: 1px solid #854d0e;
+  border-radius: 20px;
+  padding: 3px 12px;
+  font-size: 11px;
+  color: #fbbf24;
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+
+/* PM 고정 캐릭터 스타일 */
+.pm-char {
+  z-index: 10;
+}
+
+.pm-crown {
+  position: absolute;
+  top: -26px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #2d1f5e;
+  border: 1px solid #7c3aed;
+  border-radius: 10px;
+  padding: 2px 8px;
+  font-size: 9px;
+  color: #c084fc;
+  white-space: nowrap;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+}
+
+.done-bubble {
+  background: #0f2a1a !important;
+  border-color: #166534 !important;
+  color: #4ade80 !important;
+}
+
+/* PM 고정 표시 */
+.agent-role {
+  font-size: 10px;
+  color: #9d8abf;
+  margin-top: 1px;
+}
+
+/* ─── 에이전트 이름 인라인 편집 ──────────────────────────────── */
+.agent-name {
+  font-size: 12px;
+  font-weight: 600;
+  color: #e2d9f3;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  border-radius: 4px;
+  padding: 1px 3px;
+  margin: -1px -3px;
+  transition: background .15s;
+}
+.agent-name:hover { background: #2d2050; }
+.name-edit-icon { font-size: 9px; opacity: 0; transition: opacity .15s; }
+.agent-name:hover .name-edit-icon { opacity: 1; }
+
+.agent-name-input {
+  font-size: 12px;
+  font-weight: 600;
+  color: #e2d9f3;
+  background: #2d2050;
+  border: 1px solid #7c3aed;
+  border-radius: 4px;
+  padding: 1px 6px;
+  outline: none;
+  width: 100%;
+}
+
+/* ─── 맵 캐릭터 직무 태그 ────────────────────────────────────── */
+.char-tag-group {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+.char-role-tag {
+  font-size: 9px;
+  color: #9d8abf;
+  background: #1a1528aa;
+  padding: 1px 6px;
+  border-radius: 6px;
+  white-space: nowrap;
+  border: 1px solid #2d2540;
+}
+
+/* ─── 초상화 직무 표시 ───────────────────────────────────────── */
+.portrait-role {
+  font-size: 9px;
+  color: #9d8abf;
+  margin-top: -2px;
+  text-align: center;
+  padding: 0 4px;
+}
+
+/* ─── 프로젝트 파일 생성 버튼 ────────────────────────────────── */
+.gen-project-btn {
+  background: linear-gradient(135deg, #059669, #10b981);
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  padding: 6px 16px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  letter-spacing: .03em;
+  transition: all .15s;
+  box-shadow: 0 2px 8px #059669aa;
+}
+.gen-project-btn:hover { opacity: .85; transform: translateY(-1px); }
+.gen-project-btn:active { transform: translateY(0); }
+
+/* ─── 프로젝트 생성 모달 ─────────────────────────────────────── */
+.gen-modal {
+  background: #1a1528;
+  border: 1px solid #3d2d60;
+  border-radius: 16px;
+  padding: 28px 32px;
+  min-width: 480px;
+  max-width: 620px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  box-shadow: 0 20px 60px #00000088;
+}
+
+.gen-modal-title {
+  font-size: 18px;
+  font-weight: 700;
+  color: #e2d9f3;
+  letter-spacing: .02em;
+}
+
+.gen-modal-stage {
+  font-size: 12px;
+  font-weight: 600;
+  color: #c084fc;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.gen-modal-msg {
+  font-size: 12px;
+  color: #9d8abf;
+  line-height: 1.6;
+  font-family: 'Consolas', monospace;
+  background: #13101f;
+  padding: 8px 12px;
+  border-radius: 6px;
+  border: 1px solid #2d2540;
+  min-height: 40px;
+}
+
+.gen-spinner {
+  width: 24px;
+  height: 24px;
+  border: 2px solid #3d2d60;
+  border-top-color: #c084fc;
+  border-radius: 50%;
+  animation: spin .8s linear infinite;
+  align-self: center;
+  margin-top: 4px;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.gen-result-info {
+  background: #13101f;
+  border: 1px solid #2d2540;
+  border-radius: 8px;
+  padding: 12px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.gen-info-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  font-size: 12px;
+}
+.gen-info-row span:first-child { color: #9d8abf; min-width: 70px; flex-shrink: 0; }
+.gen-info-row span:last-child { color: #e2d9f3; }
+.gen-info-row code {
+  font-family: 'Consolas', monospace;
+  font-size: 11px;
+  color: #a78bfa;
+  word-break: break-all;
+}
+
+.gen-run-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: #4ade80;
+  letter-spacing: .05em;
+  margin-top: 4px;
+}
+
+.gen-run-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.gen-run-step {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #0d0b17;
+  border: 1px solid #2d2540;
+  border-radius: 6px;
+  padding: 8px 12px;
+}
+
+.gen-step-num {
+  width: 18px;
+  height: 18px;
+  background: #2d1f5e;
+  color: #c084fc;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.gen-run-step code {
+  flex: 1;
+  font-family: 'Consolas', monospace;
+  font-size: 12px;
+  color: #4ade80;
+}
+
+.gen-copy-btn {
+  background: #1f2a1f;
+  border: 1px solid #166534;
+  color: #4ade80;
+  font-size: 10px;
+  padding: 3px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all .15s;
+  flex-shrink: 0;
+}
+.gen-copy-btn:hover { background: #166534; }
+
+.gen-note {
+  font-size: 11px;
+  color: #6b5a8a;
+  font-style: italic;
+  text-align: center;
+}

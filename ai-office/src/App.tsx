@@ -1,43 +1,33 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import './App.css'
 
-const AGENT_TEMPLATES = [
-  { id:'pm',         name:'기획 PM',       emoji:'👩‍💼', color:'#c084fc', bg:'#2d1f5e', desc:'프로젝트 기획, 태스크 분배, 일정 관리', specialty:'기획 및 프로젝트 관리' },
-  { id:'designer',   name:'UI 디자이너',   emoji:'🎨',  color:'#f472b6', bg:'#3b0f2d', desc:'UI/UX 설계, 화면 구성, 시각 디자인', specialty:'UI/UX 디자인' },
-  { id:'frontend',   name:'프론트엔드',    emoji:'💻',  color:'#60a5fa', bg:'#0c1a3a', desc:'React, HTML/CSS, 화면 개발', specialty:'프론트엔드 개발' },
-  { id:'backend',    name:'백엔드',        emoji:'⚙️',  color:'#fb923c', bg:'#2a1500', desc:'API 설계, 서버, 데이터베이스', specialty:'백엔드 개발' },
-  { id:'writer',     name:'콘텐츠 작가',   emoji:'✍️',  color:'#34d399', bg:'#0a2a1a', desc:'블로그, 카피라이팅, 문서 작성', specialty:'글쓰기 및 콘텐츠' },
-  { id:'researcher', name:'리서처',        emoji:'🔬',  color:'#a78bfa', bg:'#1a0f3a', desc:'시장 조사, 데이터 분석, 리포트', specialty:'리서치 및 분석' },
-  { id:'qa',         name:'QA 엔지니어',   emoji:'🔍',  color:'#f87171', bg:'#2a0a0a', desc:'테스트, 버그 리포트, 품질 검수', specialty:'QA 및 테스팅' },
-  { id:'marketer',   name:'마케터',        emoji:'📣',  color:'#fbbf24', bg:'#2a1a00', desc:'마케팅 전략, SNS, 광고 카피', specialty:'마케팅 및 홍보' },
-  { id:'analyst',    name:'데이터 분석가', emoji:'📊',  color:'#22d3ee', bg:'#0a1f2a', desc:'데이터 분석, 시각화, 인사이트 도출', specialty:'데이터 분석' },
-  { id:'lawyer',     name:'법무 검토',     emoji:'⚖️',  color:'#94a3b8', bg:'#1a1f2a', desc:'계약서 검토, 법적 리스크 분석', specialty:'법무 및 컴플라이언스' },
-]
-
-const MAP_OBJECTS = [
-  { label:'🖥️ 기획실',      left:20,  top:16, w:120, h:48, bg:'#1a1f35', bc:'#2d3a6a' },
-  { label:'🎨 크리에이티브', left:180, top:16, w:120, h:48, bg:'#1f1535', bc:'#5a2d8e' },
-  { label:'💻 개발팀',       left:340, top:16, w:110, h:48, bg:'#0f2a1a', bc:'#1a6a3a' },
-  { label:'📋 회의실',       left:340, top:110,w:110, h:70, bg:'#2a1515', bc:'#8e2d2d' },
-  { label:'☕ 휴게실',       left:20,  top:120,w:80,  h:50, bg:'#1a1a10', bc:'#6a6a1a' },
-]
-
-const CHAR_POSITIONS = [
-  { left:50,  top:72  },
-  { left:210, top:72  },
-  { left:370, top:72  },
-  { left:50,  top:170 },
-  { left:210, top:170 },
-  { left:370, top:170 },
-]
-
-type Template = typeof AGENT_TEMPLATES[0]
-type HiredAgent = Template & { nickname: string }
+// ─── 타입 ────────────────────────────────────────────────────────────
 type Msg = { role: 'user' | 'assistant'; content: string }
 type AgentState = { history: Msg[]; input: string; loading: boolean }
-type DistTask = { nickname: string; task: string; status: 'pending' | 'working' | 'done' }
+type Agent = { id: string; name: string; emoji: string; color: string; bg: string; specialty: string; task?: string }
+type TaskStatus = 'pending' | 'working' | 'done'
+type TaskLog = { name: string; task: string; status: TaskStatus }
+type GenStatus = { stage: string; message: string } | null
 
-function extractCode(text: string): { code: string; ext: string; lang: string } | null {
+// ─── 상수 ────────────────────────────────────────────────────────────
+const PM: Agent = { id: 'pm', name: '지나', emoji: '👩‍💼', color: '#c084fc', bg: '#2d1f5e', specialty: '프로젝트 매니저' }
+
+const MAP_OBJECTS = [
+  { label: '🖥️ 기획실',       left: 20,  top: 16,  w: 120, h: 48, bg: '#1a1f35', bc: '#2d3a6a' },
+  { label: '🎨 크리에이티브', left: 180, top: 16,  w: 120, h: 48, bg: '#1f1535', bc: '#5a2d8e' },
+  { label: '💻 개발팀',        left: 340, top: 16,  w: 110, h: 48, bg: '#0f2a1a', bc: '#1a6a3a' },
+  { label: '📋 회의실',        left: 340, top: 110, w: 110, h: 70, bg: '#2a1515', bc: '#8e2d2d' },
+  { label: '☕ 휴게실',        left: 20,  top: 120, w: 80,  h: 50, bg: '#1a1a10', bc: '#6a6a1a' },
+]
+
+const CHAR_SLOTS = [
+  { left: 50,  top: 72  }, { left: 160, top: 72  }, { left: 270, top: 72  }, { left: 380, top: 72  },
+  { left: 50,  top: 160 }, { left: 160, top: 160 }, { left: 270, top: 160 }, { left: 380, top: 160 },
+]
+const PM_POS = { left: 470, top: 110 }
+
+// ─── 유틸 ────────────────────────────────────────────────────────────
+function extractCode(text: string) {
   const patterns = [
     { regex: /```html\n?([\s\S]*?)```/,       ext: 'html',  lang: 'HTML' },
     { regex: /```tsx\n?([\s\S]*?)```/,         ext: 'tsx',   lang: 'TSX' },
@@ -48,69 +38,47 @@ function extractCode(text: string): { code: string; ext: string; lang: string } 
     { regex: /```css\n?([\s\S]*?)```/,         ext: 'css',   lang: 'CSS' },
     { regex: /```[\w]*\n?([\s\S]*?)```/,       ext: 'txt',   lang: 'Code' },
   ]
-  for (const p of patterns) {
-    const m = text.match(p.regex)
-    if (m) return { code: m[1].trim(), ext: p.ext, lang: p.lang }
-  }
+  for (const p of patterns) { const m = text.match(p.regex); if (m) return { code: m[1].trim(), ext: p.ext, lang: p.lang } }
   return null
 }
 
-async function saveCode(result: { code: string; ext: string }) {
-  await (window as any).electronAPI.saveFile(result.code, `output.${result.ext}`)
-}
+const LANG_MAP: Record<string, string> = { tsx:'TSX', typescript:'TypeScript', javascript:'JavaScript', jsx:'JSX', python:'Python', css:'CSS', html:'HTML', '':'Code' }
+const EXT_MAP:  Record<string, string> = { tsx:'tsx', typescript:'ts', javascript:'js', jsx:'jsx', python:'py', css:'css', html:'html', '':'txt' }
 
+// ─── CodeBlock ───────────────────────────────────────────────────────
 function CodeBlock({ code, lang, ext }: { code: string; lang: string; ext: string }) {
   const [copied, setCopied] = useState(false)
-  const copy = () => {
-    navigator.clipboard.writeText(code)
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
-  }
+  const copy = () => { navigator.clipboard.writeText(code); setCopied(true); setTimeout(() => setCopied(false), 2000) }
+  const save = () => (window as any).electronAPI.saveFile(code, `output.${ext}`)
   return (
     <div className="code-block">
       <div className="code-block-header">
         <span className="code-lang">{lang}</span>
-        <button className="code-copy-btn" onClick={copy}>
-          {copied ? '✓ 복사됨' : '📋 복사'}
-        </button>
+        <div style={{ display:'flex', gap:6 }}>
+          <button className="code-copy-btn" onClick={copy}>{copied ? '✓ 복사됨' : '📋 복사'}</button>
+          <button className="code-copy-btn" onClick={save}>💾 저장</button>
+        </div>
       </div>
       <pre className="code-content"><code>{code}</code></pre>
     </div>
   )
 }
 
-function QuickCopyBar({ content, lang }: { content: string; lang: string }) {
+// ─── QuickCopyBar ─────────────────────────────────────────────────────
+function QuickCopyBar({ content }: { content: string }) {
   const [copiedIdx, setCopiedIdx] = useState<number | null>(null)
-
-  const codeBlocks: { code: string; lang: string }[] = []
-  const regex = /```([\w]*)\n?([\s\S]*?)```/g
-  const langMap: Record<string, string> = {
-    tsx: 'TSX', typescript: 'TypeScript', javascript: 'JavaScript',
-    jsx: 'JSX', python: 'Python', css: 'CSS', html: 'HTML', '': 'Code'
-  }
-  let match
-  while ((match = regex.exec(content)) !== null) {
-    codeBlocks.push({
-      code: match[2].trim(),
-      lang: langMap[match[1]] || match[1].toUpperCase() || 'Code'
-    })
-  }
-
-  if (codeBlocks.length === 0) return null
-
-  const copy = (code: string, idx: number) => {
-    navigator.clipboard.writeText(code)
-    setCopiedIdx(idx)
-    setTimeout(() => setCopiedIdx(null), 2000)
-  }
-
+  const blocks: { code: string; lang: string }[] = []
+  const regex = /```([\w]*)\n?([\s\S]*?)```/g; let m
+  while ((m = regex.exec(content)) !== null) blocks.push({ code: m[2].trim(), lang: LANG_MAP[m[1]] || m[1].toUpperCase() || 'Code' })
+  if (!blocks.length) return null
+  const copy = (code: string, i: number) => { navigator.clipboard.writeText(code); setCopiedIdx(i); setTimeout(() => setCopiedIdx(null), 2000) }
   return (
     <div className="quick-copy-bar">
-      <span className="quick-copy-label">📋 코드 복사</span>
+      <span className="quick-copy-label">📋 빠른 복사</span>
       <div className="quick-copy-btns">
-        {codeBlocks.map((block, idx) => (
-          <button key={idx} className="quick-copy-btn" onClick={() => copy(block.code, idx)}>
-            {copiedIdx === idx ? '✓ 복사됨!' : `${idx + 1}. ${block.lang}`}
+        {blocks.map((b, i) => (
+          <button key={i} className="quick-copy-btn" onClick={() => copy(b.code, i)}>
+            {copiedIdx === i ? '✓!' : `${i+1}. ${b.lang}`}
           </button>
         ))}
       </div>
@@ -118,31 +86,22 @@ function QuickCopyBar({ content, lang }: { content: string; lang: string }) {
   )
 }
 
+// ─── MessageRenderer ──────────────────────────────────────────────────
 function MessageRenderer({ content, agentId }: { content: string; agentId: string }) {
   if (agentId === 'designer') {
     const htmlMatch = content.match(/```html\n?([\s\S]*?)```/)
     if (htmlMatch) {
-      const htmlCode = htmlMatch[1]
+      const before = content.substring(0, content.indexOf('```html')).trim()
       const fullMatch = content.match(/```html[\s\S]*?```/)
-      const beforeCode = content.substring(0, content.indexOf('```html')).trim()
-      const afterCode = fullMatch
-        ? content.substring(content.indexOf('```html') + fullMatch[0].length).trim()
-        : ''
+      const after = fullMatch ? content.substring(content.indexOf('```html') + fullMatch[0].length).trim() : ''
       return (
         <div>
-          {beforeCode && <div style={{ whiteSpace:'pre-wrap', marginBottom:10 }}>{beforeCode}</div>}
+          {before && <div style={{ whiteSpace:'pre-wrap', marginBottom:10 }}>{before}</div>}
           <div className="preview-container">
-            <div className="preview-label">
-              <span>🎨 UI 목업 미리보기</span>
-            </div>
-            <iframe
-              className="html-preview"
-              srcDoc={htmlCode}
-              sandbox="allow-scripts"
-              title="UI Preview"
-            />
+            <div className="preview-label"><span>🎨 UI 목업 미리보기</span></div>
+            <iframe className="html-preview" srcDoc={htmlMatch[1]} sandbox="allow-scripts" title="UI Preview" />
           </div>
-          {afterCode && <div style={{ whiteSpace:'pre-wrap', marginTop:10 }}>{afterCode}</div>}
+          {after && <div style={{ whiteSpace:'pre-wrap', marginTop:10 }}>{after}</div>}
         </div>
       )
     }
@@ -150,56 +109,23 @@ function MessageRenderer({ content, agentId }: { content: string; agentId: strin
     return (
       <div>
         {textOnly && <div style={{ whiteSpace:'pre-wrap' }}>{textOnly}</div>}
-        {content.includes('```') && (
-          <div className="generating-badge">🎨 목업 생성 중...</div>
-        )}
+        {content.includes('```') && <div className="generating-badge">🎨 목업 생성 중...</div>}
       </div>
     )
   }
-
-  // 일반 에이전트 — 코드블록을 CodeBlock 컴포넌트로 렌더링
   const parts: React.ReactNode[] = []
-  let remaining = content
-  let idx = 0
-  const codeBlockRegex = /```([\w]*)\n?([\s\S]*?)```/g
-  let match
-  let lastIndex = 0
-
-  const tempRegex = /```([\w]*)\n?([\s\S]*?)```/g
-  while ((match = tempRegex.exec(content)) !== null) {
-    // 코드블록 앞 텍스트
-    if (match.index > lastIndex) {
-      const text = content.substring(lastIndex, match.index).trim()
-      if (text) parts.push(<div key={idx++} style={{ whiteSpace:'pre-wrap', marginBottom:8 }}>{text}</div>)
-    }
-    // 코드블록
-    const lang = match[1]
-    const code = match[2].trim()
-    const langMap: Record<string, string> = {
-      tsx: 'TSX', typescript: 'TypeScript', javascript: 'JavaScript',
-      jsx: 'JSX', python: 'Python', css: 'CSS', html: 'HTML', '': 'Code'
-    }
-    const extMap: Record<string, string> = {
-      tsx: 'tsx', typescript: 'ts', javascript: 'js',
-      jsx: 'jsx', python: 'py', css: 'css', html: 'html', '': 'txt'
-    }
-    parts.push(
-      <CodeBlock key={idx++} code={code} lang={langMap[lang] || lang.toUpperCase() || 'Code'} ext={extMap[lang] || 'txt'} />
-    )
+  let lastIndex = 0, idx = 0
+  const reg = /```([\w]*)\n?([\s\S]*?)```/g; let match
+  while ((match = reg.exec(content)) !== null) {
+    if (match.index > lastIndex) { const t = content.substring(lastIndex, match.index).trim(); if (t) parts.push(<div key={idx++} style={{ whiteSpace:'pre-wrap', marginBottom:8 }}>{t}</div>) }
+    parts.push(<CodeBlock key={idx++} code={match[2].trim()} lang={LANG_MAP[match[1]] || match[1].toUpperCase() || 'Code'} ext={EXT_MAP[match[1]] || 'txt'} />)
     lastIndex = match.index + match[0].length
   }
-  // 마지막 남은 텍스트
-  if (lastIndex < content.length) {
-    const text = content.substring(lastIndex).trim()
-    if (text) parts.push(<div key={idx++} style={{ whiteSpace:'pre-wrap', marginTop:8 }}>{text}</div>)
-  }
-
-  if (parts.length === 0) {
-    return <div style={{ whiteSpace:'pre-wrap', wordBreak:'break-word' }}>{content}</div>
-  }
-  return <div>{parts}</div>
+  if (lastIndex < content.length) { const t = content.substring(lastIndex).trim(); if (t) parts.push(<div key={idx++} style={{ whiteSpace:'pre-wrap', marginTop:8 }}>{t}</div>) }
+  return parts.length === 0 ? <div style={{ whiteSpace:'pre-wrap', wordBreak:'break-word' }}>{content}</div> : <div>{parts}</div>
 }
 
+// ─── FullScreenPreview ────────────────────────────────────────────────
 function FullScreenPreview({ html, onClose }: { html: string; onClose: () => void }) {
   return (
     <div className="fullscreen-overlay" onClick={onClose}>
@@ -208,420 +134,417 @@ function FullScreenPreview({ html, onClose }: { html: string; onClose: () => voi
           <span>🎨 UI 전체화면 미리보기</span>
           <button className="fullscreen-close" onClick={onClose}>✕ 닫기</button>
         </div>
-        <iframe
-          className="fullscreen-iframe"
-          srcDoc={html}
-          sandbox="allow-scripts"
-          title="Full Preview"
-        />
+        <iframe className="fullscreen-iframe" srcDoc={html} sandbox="allow-scripts" title="Full Preview" />
       </div>
     </div>
   )
 }
 
+// ─── ProjectGenModal ──────────────────────────────────────────────────
+function ProjectGenModal({ status, result, onClose }: {
+  status: GenStatus
+  result: any
+  onClose: () => void
+}) {
+  if (!status && !result) return null
+  return (
+    <div className="fullscreen-overlay" onClick={result ? onClose : undefined}>
+      <div className="gen-modal" onClick={e => e.stopPropagation()}>
+        {!result ? (
+          <>
+            <div className="gen-modal-title">🔨 프로젝트 생성 중...</div>
+            <div className="gen-modal-stage">{status?.stage === 'planning' ? '📐 설계' : '📁 파일 생성'}</div>
+            <div className="gen-modal-msg">{status?.message}</div>
+            <div className="gen-spinner" />
+          </>
+        ) : result.ok ? (
+          <>
+            <div className="gen-modal-title">🎉 프로젝트 생성 완료!</div>
+            <div className="gen-result-info">
+              <div className="gen-info-row"><span>📁 폴더</span><code>{result.projectDir}</code></div>
+              <div className="gen-info-row"><span>🛠 기술스택</span><span>{result.techStack}</span></div>
+              <div className="gen-info-row"><span>📄 파일 수</span><span>{result.fileCount}개 생성됨</span></div>
+            </div>
+            <div className="gen-run-title">▶ 실행 방법</div>
+            <div className="gen-run-steps">
+              {result.runInstructions?.map((step: string, i: number) => (
+                <div key={i} className="gen-run-step">
+                  <span className="gen-step-num">{i + 1}</span>
+                  <code>{step}</code>
+                  <button className="gen-copy-btn" onClick={() => navigator.clipboard.writeText(step)}>복사</button>
+                </div>
+              ))}
+            </div>
+            <div className="gen-note">📂 탐색기가 자동으로 열렸습니다</div>
+            <button className="dialog-btn" style={{ marginTop:12, alignSelf:'flex-end' }} onClick={onClose}>확인</button>
+          </>
+        ) : (
+          <>
+            <div className="gen-modal-title">❌ 생성 실패</div>
+            <div style={{ color:'#f87171', fontSize:12, marginTop:8 }}>{result.error}</div>
+            <button className="dialog-btn" style={{ marginTop:16 }} onClick={onClose}>닫기</button>
+          </>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ─── AgentNameEditor (인라인 이름 편집) ──────────────────────────────
+function AgentNameEditor({ agent, onRename }: { agent: Agent; onRename: (oldName: string, newName: string) => void }) {
+  const [editing, setEditing] = useState(false)
+  const [value, setValue] = useState(agent.name)
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => { if (editing) inputRef.current?.focus() }, [editing])
+
+  const confirm = () => {
+    const trimmed = value.trim()
+    if (trimmed && trimmed !== agent.name) onRename(agent.name, trimmed)
+    else setValue(agent.name)
+    setEditing(false)
+  }
+
+  if (editing) {
+    return (
+      <input
+        ref={inputRef}
+        className="agent-name-input"
+        value={value}
+        onChange={e => setValue(e.target.value)}
+        onBlur={confirm}
+        onKeyDown={e => { if (e.key === 'Enter') confirm(); if (e.key === 'Escape') { setValue(agent.name); setEditing(false) } }}
+        onClick={e => e.stopPropagation()}
+      />
+    )
+  }
+  return (
+    <div className="agent-name" title="클릭하여 이름 변경" onClick={e => { e.stopPropagation(); setEditing(true) }}>
+      {agent.name} <span className="name-edit-icon">✏️</span>
+    </div>
+  )
+}
+
+// ─── 메인 앱 ─────────────────────────────────────────────────────────
 export default function App() {
-  const [screen, setScreen] = useState<'office' | 'hire'>('office')
-  const [hiredAgents, setHiredAgents] = useState<HiredAgent[]>([])
-  const [activeAgent, setActiveAgent] = useState<HiredAgent | null>(null)
+  const [activeAgent, setActiveAgent] = useState<Agent>(PM)
+  const [agents, setAgents] = useState<Agent[]>([])
+  const [states, setStates] = useState<Record<string, AgentState>>({
+    [PM.name]: {
+      history: [{ role:'assistant', content:'안녕하세요, CEO님! 저는 PM 지나입니다. 🙋‍♀️\n\n어떤 프로젝트를 시작할까요? 업무를 말씀해 주시면 최적의 팀을 구성하고 바로 업무를 배분해 드릴게요!' }],
+      input: '', loading: false
+    }
+  })
   const [projectNote, setProjectNote] = useState('')
   const [showNote, setShowNote] = useState(false)
-  const [hiringAgent, setHiringAgent] = useState<Template | null>(null)
-  const [nickname, setNickname] = useState('')
-  const [states, setStates] = useState<Record<string, AgentState>>({})
-  const [dialogHeight, setDialogHeight] = useState(260)
   const [fullScreenHtml, setFullScreenHtml] = useState<string | null>(null)
+  const [dialogHeight, setDialogHeight] = useState(280)
+  const [isCreatingTeam, setIsCreatingTeam] = useState(false)
+  const [taskLogs, setTaskLogs] = useState<TaskLog[]>([])
+  const [projectTitle, setProjectTitle] = useState('')
+  const [genStatus, setGenStatus] = useState<GenStatus>(null)
+  const [genResult, setGenResult] = useState<any>(null)
+  const [isGenerating, setIsGenerating] = useState(false)
   const bottomRef = useRef<HTMLDivElement>(null)
   const isResizing = useRef(false)
-  const [autoMode, setAutoMode] = useState(false)
-  const [isDistributing, setIsDistributing] = useState(false)
-  const [distributionLog, setDistributionLog] = useState<DistTask[]>([])
 
-  const st = activeAgent ? states[activeAgent.nickname] : null
+  const st = states[activeAgent.name]
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [st?.history, st?.loading])
 
-  const hireAgent = () => {
-    if (!hiringAgent || !nickname.trim()) return
-    const newAgent: HiredAgent = { ...hiringAgent, nickname: nickname.trim() }
-    setHiredAgents(prev => [...prev, newAgent])
-    setStates(prev => ({
-      ...prev,
-      [nickname.trim()]: {
-        history: [{ role: 'assistant', content: `안녕하세요! 저는 ${nickname.trim()}입니다. ${hiringAgent.specialty} 전문가로 열심히 도와드릴게요!` }],
-        input: '',
-        loading: false
-      }
-    }))
-    setNickname('')
-    setHiringAgent(null)
-    setScreen('office')
-  }
+  // ── 에이전트 이름 변경 ──────────────────────────────────────────────
+  const handleRename = useCallback((oldName: string, newName: string) => {
+    // agent 리스트 업데이트
+    setAgents(prev => prev.map(a => a.name === oldName ? { ...a, name: newName } : a))
+    // states 키 이전
+    setStates(prev => {
+      const next = { ...prev }
+      if (next[oldName]) { next[newName] = next[oldName]; delete next[oldName] }
+      return next
+    })
+    // 현재 선택된 에이전트가 변경 대상이면 업데이트
+    setActiveAgent(prev => prev.name === oldName ? { ...prev, name: newName } : prev)
+    // taskLogs 업데이트
+    setTaskLogs(prev => prev.map(t => t.name === oldName ? { ...t, name: newName } : t))
+  }, [])
 
-  const fireAgent = (agent: HiredAgent) => {
-    setHiredAgents(prev => prev.filter(a => a.nickname !== agent.nickname))
-    setStates(prev => { const n = { ...prev }; delete n[agent.nickname]; return n })
-    if (activeAgent?.nickname === agent.nickname) setActiveAgent(null)
-  }
-
-  const sendMessage = async () => {
-    if (!activeAgent || !st?.input.trim() || st.loading) return
-    const text = st.input.trim()
-    const newHistory: Msg[] = [...st.history, { role: 'user', content: text }]
+  // ── CEO → PM 프로젝트 요청 ──────────────────────────────────────────
+  const requestProject = async () => {
+    const pmState = states[PM.name]
+    if (!pmState?.input.trim() || isCreatingTeam) return
+    const text = pmState.input.trim()
 
     setStates(prev => ({
       ...prev,
-      [activeAgent.nickname]: {
-        ...prev[activeAgent.nickname],
-        history: [...newHistory, { role: 'assistant', content: '' }],
-        input: '',
-        loading: true
+      [PM.name]: {
+        ...prev[PM.name],
+        history: [...prev[PM.name].history, { role:'user', content:text }, { role:'assistant', content:'' }],
+        input: '', loading: true
       }
     }))
+    setIsCreatingTeam(true)
+    setTaskLogs([])
 
-    const agentNickname = activeAgent.nickname
+    const api = (window as any).electronAPI
+    api.offPmBriefing(); api.offAgentsCreated(); api.offAgentStreamTask(); api.offAgentTask()
 
-    ;(window as any).electronAPI.offStream()
-    ;(window as any).electronAPI.onStream((chunk: string) => {
+    api.onPmBriefing((briefing: string) => {
       setStates(prev => {
-        const agentState = prev[agentNickname]
-        if (!agentState) return prev
-        const history = [...agentState.history]
-        const last = history[history.length - 1]
-        if (last?.role === 'assistant') {
-          history[history.length - 1] = { ...last, content: last.content + chunk }
-        }
-        return { ...prev, [agentNickname]: { ...agentState, history } }
+        const h = [...prev[PM.name].history]
+        h[h.length - 1] = { role:'assistant', content:briefing }
+        return { ...prev, [PM.name]: { ...prev[PM.name], history:h } }
       })
     })
 
-    const result = await (window as any).electronAPI.askAgent(
-      activeAgent.id, activeAgent.nickname, activeAgent.specialty, newHistory, projectNote
-    )
+    api.onAgentsCreated((newAgents: Agent[], title: string) => {
+      setProjectTitle(title)
+      setAgents(newAgents)
+      setTaskLogs(newAgents.map(a => ({ name:a.name, task:a.task||'', status:'pending' as TaskStatus })))
+      newAgents.forEach(a => {
+        setStates(prev => ({
+          ...prev,
+          [a.name]: {
+            history: [{ role:'assistant', content:`안녕하세요! ${a.specialty} ${a.name}입니다. PM 지나로부터 태스크를 받았어요. 바로 시작할게요! 💪` }],
+            input: '', loading: false
+          }
+        }))
+      })
+    })
 
-    ;(window as any).electronAPI.offStream()
+    api.onAgentStreamTask((name: string, chunk: string) => {
+      setStates(prev => {
+        const s = prev[name]; if (!s) return prev
+        const h = [...s.history]
+        const last = h[h.length - 1]
+        if (last?.role === 'assistant') h[h.length - 1] = { ...last, content: last.content + chunk }
+        else h.push({ role:'assistant', content:chunk })
+        return { ...prev, [name]: { ...s, history:h } }
+      })
+    })
 
-    if (result.ok) {
-      const codeResult = extractCode(result.text)
-      if (activeAgent.id === 'pm') {
-        setProjectNote(prev => prev
-          ? `${prev}\n\n[PM ${activeAgent.nickname} 기획]\n${result.text}`
-          : `[PM ${activeAgent.nickname} 기획]\n${result.text}`)
-      } else if (codeResult && ['designer', 'frontend', 'backend'].includes(activeAgent.id)) {
+    api.onAgentTaskStart((name: string, task: string) => {
+      setTaskLogs(prev => prev.map(d => d.name === name ? { ...d, status:'working' as TaskStatus } : d))
+      setStates(prev => {
+        const s = prev[name]; if (!s) return prev
+        return { ...prev, [name]: { ...s, history:[...s.history, { role:'user', content:`[PM 배정 태스크] ${task}` }, { role:'assistant', content:'' }], loading:true } }
+      })
+    })
+
+    api.onAgentTaskDone((name: string) => {
+      setTaskLogs(prev => prev.map(d => d.name === name ? { ...d, status:'done' as TaskStatus } : d))
+      setStates(prev => { const s = prev[name]; if (!s) return prev; return { ...prev, [name]: { ...s, loading:false } } })
+    })
+
+    const result = await api.pmCreateTeam(PM.name, text, projectNote)
+    api.offPmBriefing(); api.offAgentsCreated(); api.offAgentStreamTask(); api.offAgentTask()
+
+    if (!result.ok) {
+      setStates(prev => { const h = [...prev[PM.name].history]; h[h.length-1] = { role:'assistant', content:`❌ 오류: ${result.error}` }; return { ...prev, [PM.name]: { ...prev[PM.name], history:h, loading:false } } })
+    } else {
+      if (result.plan) {
         setProjectNote(prev => {
-          const entry = `\n\n[${activeAgent.name} ${activeAgent.nickname} 결과물 - .${codeResult.ext}]\n${codeResult.code}`
-          return prev ? prev + entry : entry
-        })
-      } else if (result.text.length > 100) {
-        setProjectNote(prev => {
-          const entry = `\n\n[${activeAgent.name} ${activeAgent.nickname} 답변]\n${result.text}`
-          return prev ? prev + entry : entry
+          const entry = `[프로젝트: ${result.plan.projectTitle}]\n${result.plan.pmBriefing}`
+          return prev ? `${prev}\n\n${entry}` : entry
         })
       }
+      setStates(prev => ({ ...prev, [PM.name]: { ...prev[PM.name], loading:false } }))
     }
+    setIsCreatingTeam(false)
+  }
 
-    setStates(prev => ({
-      ...prev,
-      [agentNickname]: { ...prev[agentNickname], loading: false }
-    }))
+  // ── 일반 채팅 ────────────────────────────────────────────────────────
+  const sendMessage = async () => {
+    if (!st?.input.trim() || st.loading) return
+    const text = st.input.trim()
+    const agentName = activeAgent.name
+    const newHistory: Msg[] = [...st.history, { role:'user', content:text }]
+
+    setStates(prev => ({ ...prev, [agentName]: { ...prev[agentName], history:[...newHistory, { role:'assistant', content:'' }], input:'', loading:true } }))
+
+    const api = (window as any).electronAPI
+    api.offStream()
+    api.onStream((chunk: string) => {
+      setStates(prev => {
+        const s = prev[agentName]; if (!s) return prev
+        const h = [...s.history]; const last = h[h.length-1]
+        if (last?.role === 'assistant') h[h.length-1] = { ...last, content: last.content + chunk }
+        return { ...prev, [agentName]: { ...s, history:h } }
+      })
+    })
+
+    let result
+    if (activeAgent.id === 'pm') {
+      const summary = agents.map(a => `${a.name} (${a.specialty})`).join(', ')
+      result = await api.askPm(PM.name, newHistory, projectNote, summary)
+    } else {
+      result = await api.askAgent(activeAgent.id, activeAgent.name, activeAgent.specialty, newHistory, projectNote)
+    }
+    api.offStream()
+
+    if (result.ok && result.text) {
+      const codeResult = extractCode(result.text)
+      if (codeResult && ['designer','frontend','backend'].includes(activeAgent.id)) {
+        setProjectNote(prev => { const e = `\n\n[${activeAgent.name} 결과물 .${codeResult.ext}]\n${codeResult.code}`; return prev ? prev+e : e })
+      }
+    }
+    setStates(prev => ({ ...prev, [agentName]: { ...prev[agentName], loading:false } }))
+  }
+
+  // ── 프로젝트 파일 자동 생성 ──────────────────────────────────────────
+  const generateProject = async () => {
+    if (isGenerating || agents.length === 0) return
+    setIsGenerating(true)
+    setGenStatus({ stage:'planning', message:'준비 중...' })
+    setGenResult(null)
+
+    const api = (window as any).electronAPI
+    api.offProjectGenStatus()
+    api.onProjectGenStatus((stage: string, message: string) => {
+      setGenStatus({ stage, message })
+    })
+
+    // 각 에이전트의 마지막 산출물 수집
+    const agentOutputs = agents.map(a => {
+      const hist = states[a.name]?.history || []
+      const lastAssistant = [...hist].reverse().find(m => m.role === 'assistant' && m.content.length > 50)
+      return { agentName: a.name, agentRole: a.specialty, content: lastAssistant?.content || '(산출물 없음)' }
+    })
+
+    const result = await api.generateProjectFiles(projectTitle, agentOutputs, projectNote)
+    api.offProjectGenStatus()
+
+    if (result.cancelled) {
+      setGenStatus(null)
+      setIsGenerating(false)
+      return
+    }
+    setGenStatus(null)
+    setGenResult(result)
+    setIsGenerating(false)
+  }
+
+  const onEnter = (e: React.KeyboardEvent) => {
+    if (e.key !== 'Enter') return
+    if (activeAgent.id === 'pm') requestProject(); else sendMessage()
   }
 
   const startResize = (e: React.MouseEvent) => {
     isResizing.current = true
-    const startY = e.clientY
-    const startH = dialogHeight
-    const onMove = (ev: MouseEvent) => {
-      if (!isResizing.current) return
-      const delta = startY - ev.clientY
-      setDialogHeight(Math.max(160, Math.min(600, startH + delta)))
-    }
-    const onUp = () => {
-      isResizing.current = false
-      window.removeEventListener('mousemove', onMove)
-      window.removeEventListener('mouseup', onUp)
-    }
-    window.addEventListener('mousemove', onMove)
-    window.addEventListener('mouseup', onUp)
+    const startY = e.clientY, startH = dialogHeight
+    const onMove = (ev: MouseEvent) => { if (!isResizing.current) return; setDialogHeight(Math.max(160, Math.min(600, startH + (startY - ev.clientY)))) }
+    const onUp = () => { isResizing.current = false; window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp) }
+    window.addEventListener('mousemove', onMove); window.addEventListener('mouseup', onUp)
   }
 
-  const distributeTask = async () => {
-    if (!activeAgent || activeAgent.id !== 'pm') return
-    const userRequest = st?.input.trim()
-    if (!userRequest) return
+  const allAgents = [PM, ...agents]
+  const canGenerate = agents.length > 0 && !isCreatingTeam && !isGenerating
 
-    const otherAgents = hiredAgents.filter(a => a.id !== 'pm')
-    if (otherAgents.length === 0) {
-      alert('PM 외 다른 에이전트를 먼저 고용해주세요!')
-      return
-    }
-
-    setIsDistributing(true)
-    setDistributionLog([])
-
-    // PM 채팅에 사용자 메시지 + 분석 중 메시지 추가
-    const pmNickname = activeAgent.nickname
-    setStates(prev => ({
-      ...prev,
-      [pmNickname]: {
-        ...prev[pmNickname],
-        history: [...prev[pmNickname].history,
-          { role: 'user', content: `[자동 분배 요청] ${userRequest}` },
-          { role: 'assistant', content: '🤖 팀원들에게 태스크를 배분하고 있습니다...' }
-        ],
-        input: '',
-        loading: true
-      }
-    }))
-
-    const result = await (window as any).electronAPI.pmDistribute(
-      pmNickname, userRequest, otherAgents, projectNote
-    )
-
-    if (!result.ok) {
-      setStates(prev => ({
-        ...prev,
-        [pmNickname]: {
-          ...prev[pmNickname],
-          history: [...prev[pmNickname].history,
-            { role: 'assistant', content: `❌ 분배 실패: ${result.error}` }
-          ],
-          loading: false
-        }
-      }))
-      setIsDistributing(false)
-      return
-    }
-
-    // PM 브리핑 업데이트
-    const pmSummary = `📋 태스크 분배 완료!\n\n${result.pmSummary}\n\n` +
-      result.tasks.map((t: any, i: number) => `${i + 1}. ${t.agentNickname} → ${t.task}`).join('\n')
-
-    setStates(prev => {
-      const h = [...prev[pmNickname].history]
-      h[h.length - 1] = { role: 'assistant', content: pmSummary }
-      return { ...prev, [pmNickname]: { ...prev[pmNickname], history: h, loading: false } }
-    })
-
-    setProjectNote(prev => prev
-      ? `${prev}\n\n[PM ${pmNickname} 자동 분배]\n${result.pmSummary}`
-      : `[PM ${pmNickname} 자동 분배]\n${result.pmSummary}`)
-
-    // 분배 로그 초기화
-    setDistributionLog(result.tasks.map((t: any) => ({
-      nickname: t.agentNickname, task: t.task, status: 'pending' as const
-    })))
-
-    // 스트리밍 리스너 등록
-    ;(window as any).electronAPI.offStreamTask()
-    ;(window as any).electronAPI.onStreamTask((nickname: string, chunk: string) => {
-      setStates(prev => {
-        const s = prev[nickname]
-        if (!s) return prev
-        const h = [...s.history]
-        const last = h[h.length - 1]
-        if (last?.role === 'assistant') {
-          h[h.length - 1] = { ...last, content: last.content + chunk }
-        }
-        return { ...prev, [nickname]: { ...s, history: h } }
-      })
-    })
-
-    // 각 에이전트 순차 실행
-    for (const task of result.tasks) {
-      const agent = hiredAgents.find(a => a.nickname === task.agentNickname)
-      if (!agent) continue
-
-      setDistributionLog(prev => prev.map(d =>
-        d.nickname === task.agentNickname ? { ...d, status: 'working' as const } : d
-      ))
-
-      setStates(prev => ({
-        ...prev,
-        [task.agentNickname]: {
-          ...(prev[task.agentNickname] || { history: [], input: '', loading: false }),
-          history: [...(prev[task.agentNickname]?.history || []),
-            { role: 'user', content: `[PM 배정 태스크] ${task.task}` },
-            { role: 'assistant', content: '' }
-          ],
-          loading: true
-        }
-      }))
-
-      await (window as any).electronAPI.runAgentTask(
-        agent.id, agent.nickname, agent.specialty, task.task, projectNote
-      )
-
-      setStates(prev => ({
-        ...prev,
-        [task.agentNickname]: { ...prev[task.agentNickname], loading: false }
-      }))
-
-      setDistributionLog(prev => prev.map(d =>
-        d.nickname === task.agentNickname ? { ...d, status: 'done' as const } : d
-      ))
-    }
-
-    ;(window as any).electronAPI.offStreamTask()
-    setIsDistributing(false)
-  }
-
-  // 고용 화면
-  if (screen === 'hire') {
-    return (
-      <div className="app-layout">
-        <div className="titlebar">
-          <div className="titlebar-left">
-            <span className="title-logo">♟ 두근두근 컴퍼니</span>
-            <span className="title-sub">에이전트 고용</span>
-          </div>
-          <button className="note-toggle-btn" style={{ width:'auto', padding:'4px 12px' }}
-            onClick={() => setScreen('office')}>← 사무실로</button>
-        </div>
-        <div style={{ display:'flex', flex:1, overflow:'hidden' }}>
-          <aside className="sidebar">
-            <div className="sidebar-sec">내 팀 ({hiredAgents.length}명)</div>
-            <div style={{ flex:1, overflowY:'auto' }}>
-              {hiredAgents.map(a => (
-                <div key={a.nickname} className="agent-item"
-                  onClick={() => { setScreen('office'); setActiveAgent(a) }}>
-                  <div className="agent-avatar" style={{ background: a.bg }}>{a.emoji}</div>
-                  <div className="agent-info">
-                    <div className="agent-name">{a.nickname}</div>
-                    <div className="agent-role">{a.name}</div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </aside>
-          <main style={{ flex:1, display:'flex', flexDirection:'column', overflow:'hidden' }}>
-            <div className="titlebar" style={{ background:'#13101f', borderBottom:'1px solid #2d2540' }}>
-              <span style={{ fontSize:13, color:'#9d8abf' }}>전문가를 선택하고 이름을 붙여 팀에 합류시키세요</span>
-            </div>
-            <div className="hire-grid">
-              {AGENT_TEMPLATES.map(t => (
-                <div key={t.id}
-                  className={`hire-card ${hiringAgent?.id === t.id ? 'selected' : ''}`}
-                  onClick={() => { setHiringAgent(t); setNickname(t.name) }}>
-                  <div className="hire-emoji">{t.emoji}</div>
-                  <div className="hire-name">{t.name}</div>
-                  <div className="hire-desc">{t.desc}</div>
-                  {hiredAgents.some(a => a.id === t.id) && (
-                    <span className="hire-badge-done">고용됨</span>
-                  )}
-                </div>
-              ))}
-            </div>
-            {hiringAgent && (
-              <div className="hire-confirm">
-                <span style={{ fontSize:22 }}>{hiringAgent.emoji}</span>
-                <div style={{ flex:1 }}>
-                  <div style={{ fontSize:11, color:'#9d8abf', marginBottom:4 }}>
-                    {hiringAgent.name} — 이름을 지어주세요
-                  </div>
-                  <input
-                    className="dialog-input"
-                    style={{ width:'100%' }}
-                    value={nickname}
-                    onChange={e => setNickname(e.target.value)}
-                    onKeyDown={e => e.key === 'Enter' && hireAgent()}
-                    placeholder="예: 지나, 준혁, Alex..."
-                    autoFocus
-                  />
-                </div>
-                <button className="dialog-btn" onClick={hireAgent}>고용 ✓</button>
-              </div>
-            )}
-          </main>
-        </div>
-      </div>
-    )
-  }
-
-  // 메인 오피스 화면
   return (
     <div className="app-layout">
-      {fullScreenHtml && (
-        <FullScreenPreview html={fullScreenHtml} onClose={() => setFullScreenHtml(null)} />
+      {fullScreenHtml && <FullScreenPreview html={fullScreenHtml} onClose={() => setFullScreenHtml(null)} />}
+      {(genStatus || genResult) && (
+        <ProjectGenModal status={genStatus} result={genResult} onClose={() => { setGenResult(null); setGenStatus(null) }} />
       )}
 
+      {/* 타이틀바 */}
       <div className="titlebar">
         <div className="titlebar-left">
           <span className="title-logo">♟ 두근두근 컴퍼니</span>
-          <span className="title-sub">AI Agent Office</span>
+          {projectTitle && <span className="project-title-badge">📁 {projectTitle}</span>}
         </div>
-        <div className="gold-badge">🪙 골드 시스템 준비 중</div>
+        <div className="titlebar-right">
+          {isCreatingTeam && <span className="creating-badge">⚙️ 팀 구성 중...</span>}
+          {canGenerate && (
+            <button className="gen-project-btn" onClick={generateProject}>
+              🚀 프로젝트 파일 생성
+            </button>
+          )}
+          {isGenerating && <span className="creating-badge">🔨 생성 중...</span>}
+        </div>
       </div>
 
       <div className="main-area">
+        {/* 사이드바 */}
         <aside className="sidebar">
-          <div className="sidebar-sec">내 팀 ({hiredAgents.length}명)</div>
+          <div className="sidebar-sec">팀 ({allAgents.length}명)</div>
           <div style={{ flex:1, overflowY:'auto' }}>
-            {hiredAgents.length === 0 ? (
-              <div className="empty-team">
-                <div style={{ fontSize:28 }}>👥</div>
-                <div>팀원이 없어요.<br/>아래 버튼으로 고용하세요!</div>
-              </div>
-            ) : (
-              hiredAgents.map(agent => (
-                <div key={agent.nickname}
-                  className={`agent-item ${activeAgent?.nickname === agent.nickname ? 'active' : ''}`}
-                  onClick={() => setActiveAgent(agent)}>
-                  <div className="agent-avatar" style={{ background: agent.bg }}>{agent.emoji}</div>
-                  <div className="agent-info">
-                    <div className="agent-name">{agent.nickname}</div>
-                    <div className="agent-role">{agent.name}</div>
+            {allAgents.map(agent => (
+              <div key={agent.name}
+                className={`agent-item ${activeAgent.name === agent.name ? 'active' : ''}`}
+                onClick={() => setActiveAgent(agent)}>
+                <div className="agent-avatar" style={{ background:agent.bg }}>{agent.emoji}</div>
+                <div className="agent-info">
+                  {agent.id === 'pm'
+                    ? <div className="agent-name">{agent.name}</div>
+                    : <AgentNameEditor agent={agent} onRename={handleRename} />
+                  }
+                  <div className="agent-role">
+                    {agent.id === 'pm' ? '📌 PM (고정)' : agent.specialty}
                   </div>
-                  <div className="status-dot"
-                    style={{ background: states[agent.nickname]?.loading ? '#fbbf24' : '#4ade80' }} />
-                  <button className="fire-btn"
-                    onClick={e => { e.stopPropagation(); fireAgent(agent) }}
-                    title="해고">✕</button>
                 </div>
-              ))
+                <div className="status-dot" style={{ background: states[agent.name]?.loading ? '#fbbf24' : '#4ade80' }} />
+              </div>
+            ))}
+            {agents.length === 0 && (
+              <div className="empty-team">
+                <div style={{ fontSize:26 }}>💬</div>
+                <div>PM 지나에게 프로젝트를 요청하면 팀원이 자동으로 생성됩니다</div>
+              </div>
             )}
           </div>
           <div className="sidebar-bottom">
-            <button className="hire-btn" onClick={() => setScreen('hire')}>+ 에이전트 고용</button>
             <button className="note-toggle-btn" onClick={() => setShowNote(!showNote)}>
               📋 프로젝트 노트 {projectNote ? '●' : ''}
             </button>
           </div>
         </aside>
 
+        {/* 오피스 */}
         <div className="office-wrap">
-          {/* 오피스 맵 */}
           <div className="map-area">
             <div className="beta-tag">MAP BETA</div>
             {MAP_OBJECTS.map((obj, i) => (
-              <div key={i} className="map-obj" style={{
-                left:obj.left, top:obj.top, width:obj.w, height:obj.h,
-                background:obj.bg, borderColor:obj.bc
-              }}>{obj.label}</div>
+              <div key={i} className="map-obj" style={{ left:obj.left, top:obj.top, width:obj.w, height:obj.h, background:obj.bg, borderColor:obj.bc }}>{obj.label}</div>
             ))}
-            {hiredAgents.map((agent, i) => {
-              const pos = CHAR_POSITIONS[i] || { left: 50 + (i % 5) * 90, top: 72 }
-              const isActive = activeAgent?.nickname === agent.nickname
-              const isLoading = states[agent.nickname]?.loading
+
+            {/* PM 고정 */}
+            <div className="char pm-char" style={{ left:PM_POS.left, top:PM_POS.top }} onClick={() => setActiveAgent(PM)}>
+              <div className="pm-crown">👑 PM</div>
+              {states[PM.name]?.loading && <div className="status-bubble">작업 중...</div>}
+              <div className={`char-body ${states[PM.name]?.loading ? 'working' : 'idle'} ${activeAgent.name === PM.name ? 'selected' : ''}`}
+                style={{ background:PM.bg, borderColor:PM.color, color:PM.color }}>{PM.emoji}</div>
+              <div className="char-shadow" />
+              <div className="char-tag" style={{ color:PM.color }}>{PM.name}</div>
+            </div>
+
+            {/* 팀원 */}
+            {agents.map((agent, i) => {
+              const pos = CHAR_SLOTS[i] || { left:50+(i%6)*80, top:72 }
+              const isActive = activeAgent.name === agent.name
+              const isLoading = states[agent.name]?.loading
+              const taskLog = taskLogs.find(t => t.name === agent.name)
               return (
-                <div key={agent.nickname} className="char"
-                  style={{ left:pos.left, top:pos.top }}
-                  onClick={() => setActiveAgent(agent)}>
+                <div key={agent.name} className="char" style={{ left:pos.left, top:pos.top }} onClick={() => setActiveAgent(agent)}>
                   {isLoading && <div className="status-bubble">작업 중...</div>}
-                  <div className={`char-body ${isLoading ? 'working' : 'idle'} ${isActive ? 'selected' : ''}`}
-                    style={{ background:agent.bg, borderColor:agent.color, color:agent.color }}>
-                    {agent.emoji}
-                  </div>
+                  {taskLog?.status === 'done' && !isLoading && <div className="status-bubble done-bubble">✅ 완료</div>}
+                  <div className={`char-body ${isLoading?'working':'idle'} ${isActive?'selected':''}`}
+                    style={{ background:agent.bg, borderColor:agent.color, color:agent.color }}>{agent.emoji}</div>
                   <div className="char-shadow" />
-                  <div className="char-tag">{agent.nickname}</div>
+                  {/* 맵 캐릭터 아래 이름+직무 태그 */}
+                  <div className="char-tag-group">
+                    <div className="char-tag">{agent.name}</div>
+                    <div className="char-role-tag">{agent.specialty}</div>
+                  </div>
                 </div>
               )
             })}
-            {hiredAgents.length === 0 && (
-              <div style={{ position:'absolute', inset:0, display:'flex', alignItems:'center',
-                justifyContent:'center', flexDirection:'column', gap:8 }}>
+
+            {agents.length === 0 && !isCreatingTeam && (
+              <div style={{ position:'absolute', inset:0, display:'flex', alignItems:'center', justifyContent:'center', flexDirection:'column', gap:8 }}>
                 <div style={{ fontSize:32 }}>🏢</div>
-                <div style={{ fontSize:12, color:'#3d2d60' }}>에이전트를 고용하면 사무실에 나타납니다</div>
+                <div style={{ fontSize:12, color:'#3d2d60', textAlign:'center' }}>PM 지나에게 프로젝트를 요청하면<br />팀원들이 이 공간에 나타납니다</div>
               </div>
             )}
           </div>
@@ -630,26 +553,22 @@ export default function App() {
           {showNote && (
             <div className="note-panel">
               <div className="note-header">
-                <span>📋 프로젝트 노트 — 모든 에이전트가 이 내용을 알고 있습니다</span>
+                <span>📋 프로젝트 노트 — 전 팀원이 이 내용을 알고 있습니다</span>
                 <button className="note-close" onClick={() => setShowNote(false)}>✕</button>
               </div>
-              <textarea className="note-textarea" value={projectNote}
-                onChange={e => setProjectNote(e.target.value)}
-                placeholder="프로젝트 관련 내용을 입력하세요." />
+              <textarea className="note-textarea" value={projectNote} onChange={e => setProjectNote(e.target.value)} placeholder="프로젝트 관련 내용을 입력하세요." />
             </div>
           )}
 
-          {/* 자동 분배 진행 패널 */}
-          {distributionLog.length > 0 && (
+          {/* 태스크 진행 패널 */}
+          {taskLogs.length > 0 && (
             <div className="distribution-panel">
-              <div className="distribution-title">🤖 자동 분배 진행 상황</div>
+              <div className="distribution-title">{isCreatingTeam ? '⚙️ 팀 구성 및 업무 배분 진행 중' : '✅ 팀 구성 완료'}</div>
               <div className="distribution-tasks">
-                {distributionLog.map((d, i) => (
+                {taskLogs.map((d, i) => (
                   <div key={i} className={`distribution-task ${d.status}`}>
-                    <span className="dist-status">
-                      {d.status === 'pending' ? '⏸' : d.status === 'working' ? '⚙️' : '✅'}
-                    </span>
-                    <span className="dist-nickname">{d.nickname}</span>
+                    <span className="dist-status">{d.status==='pending'?'⏸':d.status==='working'?'⚙️':'✅'}</span>
+                    <span className="dist-nickname">{d.name}</span>
                     <span className="dist-task">{d.task}</span>
                   </div>
                 ))}
@@ -657,124 +576,70 @@ export default function App() {
             </div>
           )}
 
-          {/* 리사이즈 핸들 */}
           <div className="dialog-resize-handle" onMouseDown={startResize} />
 
           {/* 대화창 */}
-          <div className="dialog-box" style={{ height: dialogHeight }}>
-            {!activeAgent ? (
-              <div className="dialog-empty">
-                ↑ 사무실에서 캐릭터를 클릭하거나 왼쪽에서 에이전트를 선택하세요
+          <div className="dialog-box" style={{ height:dialogHeight }}>
+            <div className="dialog-portrait">
+              <div className="portrait-face" style={{ borderColor:activeAgent.color }}>{activeAgent.emoji}</div>
+              {activeAgent.id === 'pm' && <div style={{ fontSize:9, color:'#c084fc', marginTop:2 }}>📌 고정 PM</div>}
+              <div className="portrait-name">{activeAgent.name}</div>
+              <div className="portrait-role">{activeAgent.specialty}</div>
+              <div className="portrait-status">
+                <span style={{ width:5, height:5, borderRadius:'50%', background:st?.loading?'#fbbf24':'#4ade80', display:'inline-block' }} />
+                {st?.loading ? '작업 중' : '대기 중'}
               </div>
-            ) : (
-              <>
-                <div className="dialog-portrait">
-                  <div className="portrait-face" style={{ borderColor: activeAgent.color }}>
-                    {activeAgent.emoji}
-                  </div>
-                  <div className="portrait-name">{activeAgent.nickname}</div>
-                  <div className="portrait-status">
-                    <span style={{ width:5, height:5, borderRadius:'50%',
-                      background: st?.loading ? '#fbbf24' : '#4ade80', display:'inline-block' }} />
-                    {st?.loading ? '작업 중' : '대기 중'}
-                  </div>
-                </div>
-                <div className="dialog-content">
-                  <div className="dialog-speaker" style={{ color: activeAgent.color }}>
-                    {activeAgent.nickname} — {activeAgent.name}
-                    {projectNote && (
-                      <span className="context-badge" style={{ marginLeft:8 }}>📋 컨텍스트</span>
-                    )}
-                  </div>
-                  <div className="dialog-messages">
-                    {st?.history.map((msg, i) => {
-                      const isLastMsg = i === (st?.history.length ?? 0) - 1
-                      const lastCode = isLastMsg && msg.role === 'assistant'
-                        ? extractCode(msg.content)
-                        : null
-                      return (
-                        <div key={i}>
-                          {msg.role === 'user'
-                            ? <div className="dialog-msg-user">{msg.content}</div>
-                            : <div className="dialog-msg">
-                                <MessageRenderer content={msg.content} agentId={activeAgent.id} />
-                                {activeAgent.id === 'designer' && msg.content.match(/```html\n?([\s\S]*?)```/) && (
-                                  <div style={{ display:'flex', gap:6, marginTop:6 }}>
-                                    <button className="preview-fullscreen-btn"
-                                      onClick={() => {
-                                        const m = msg.content.match(/```html\n?([\s\S]*?)```/)
-                                        if (m) setFullScreenHtml(m[1])
-                                      }}>
-                                      ⛶ 전체화면
-                                    </button>
-                                    <button className="save-btn"
-                                      onClick={() => {
-                                        const m = msg.content.match(/```html\n?([\s\S]*?)```/)
-                                        if (m) saveCode({ code: m[1].trim(), ext: 'html' })
-                                      }}>
-                                      💾 HTML 저장
-                                    </button>
-                                  </div>
-                                )}
-                              </div>
-                          }
-                        </div>
-                      )
-                    })}
-                    {st?.loading && <div className="dialog-typing">▌</div>}
-                    <div ref={bottomRef} />
-                  </div>
+            </div>
 
-                  {/* 마지막 코드 빠른 복사 바 */}
-                  {!st?.loading && (() => {
-                    const lastMsg = st?.history[st.history.length - 1]
-                    if (!lastMsg || lastMsg.role !== 'assistant') return null
-                    if (activeAgent.id === 'designer') return null
-                    const hasCode = /```[\w]*\n?[\s\S]*?```/.test(lastMsg.content)
-                    if (!hasCode) return null
-                    return <QuickCopyBar content={lastMsg.content} lang="" />
-                  })()}
-                  <div className="dialog-input-row">
-                    {activeAgent.id === 'pm' && (
-                      <button
-                        className={`auto-mode-btn ${autoMode ? 'active' : ''}`}
-                        onClick={() => setAutoMode(!autoMode)}
-                        disabled={isDistributing}
-                        title={autoMode ? '자동 분배 모드 ON' : '수동 모드'}
-                      >
-                        {autoMode ? '🤖' : '👤'}
-                      </button>
-                    )}
-                    <input className="dialog-input"
-                      value={st?.input ?? ''}
-                      onChange={e => setStates(prev => ({
-                        ...prev,
-                        [activeAgent.nickname]: { ...prev[activeAgent.nickname], input: e.target.value }
-                      }))}
-                      onKeyDown={e => {
-                        if (e.key !== 'Enter') return
-                        if (activeAgent.id === 'pm' && autoMode) distributeTask()
-                        else sendMessage()
-                      }}
-                      placeholder={
-                        activeAgent.id === 'pm' && autoMode
-                          ? '🤖 명령하면 PM이 팀 전체에 자동 배분합니다...'
-                          : `${activeAgent.nickname}에게 지시하기...`
-                      }
-                      disabled={isDistributing}
-                    />
-                    <button className="dialog-btn"
-                      onClick={() => {
-                        if (activeAgent.id === 'pm' && autoMode) distributeTask()
-                        else sendMessage()
-                      }}
-                      disabled={st?.loading || isDistributing}>
-                      {isDistributing ? '⏳' : '▶ 전송'}
-                    </button>
+            <div className="dialog-content">
+              <div className="dialog-speaker" style={{ color:activeAgent.color }}>
+                {activeAgent.name}
+                <span style={{ color:'#6b5a8a', fontWeight:400, marginLeft:6 }}>— {activeAgent.specialty}</span>
+                {projectNote && <span className="context-badge">📋 컨텍스트</span>}
+              </div>
+
+              <div className="dialog-messages">
+                {st?.history.map((msg, i) => (
+                  <div key={i}>
+                    {msg.role === 'user'
+                      ? <div className="dialog-msg-user">{msg.content}</div>
+                      : <div className="dialog-msg">
+                          <MessageRenderer content={msg.content} agentId={activeAgent.id} />
+                          {activeAgent.id === 'designer' && msg.content.match(/```html\n?([\s\S]*?)```/) && (
+                            <div style={{ display:'flex', gap:6, marginTop:6 }}>
+                              <button className="preview-fullscreen-btn" onClick={() => { const m=msg.content.match(/```html\n?([\s\S]*?)```/); if(m) setFullScreenHtml(m[1]) }}>⛶ 전체화면</button>
+                              <button className="save-btn" onClick={() => { const m=msg.content.match(/```html\n?([\s\S]*?)```/); if(m) (window as any).electronAPI.saveFile(m[1].trim(), 'output.html') }}>💾 HTML 저장</button>
+                            </div>
+                          )}
+                        </div>
+                    }
                   </div>
-                </div>
-              </>
-            )}
+                ))}
+                {st?.loading && <div className="dialog-typing">▌</div>}
+                <div ref={bottomRef} />
+              </div>
+
+              {!st?.loading && (() => {
+                const lastMsg = st?.history[st.history.length - 1]
+                if (!lastMsg || lastMsg.role !== 'assistant' || activeAgent.id === 'designer') return null
+                if (!/```[\w]*\n?[\s\S]*?```/.test(lastMsg.content)) return null
+                return <QuickCopyBar content={lastMsg.content} />
+              })()}
+
+              <div className="dialog-input-row">
+                <input className="dialog-input"
+                  value={st?.input ?? ''}
+                  onChange={e => setStates(prev => ({ ...prev, [activeAgent.name]: { ...prev[activeAgent.name], input:e.target.value } }))}
+                  onKeyDown={onEnter}
+                  placeholder={activeAgent.id==='pm' ? '🏢 PM에게 프로젝트를 요청하면 팀을 자동 구성해드려요...' : `${activeAgent.name}에게 지시하기...`}
+                  disabled={isCreatingTeam}
+                />
+                <button className="dialog-btn" onClick={() => { if(activeAgent.id==='pm') requestProject(); else sendMessage() }}
+                  disabled={st?.loading || isCreatingTeam}>
+                  {isCreatingTeam ? '⏳' : activeAgent.id==='pm' ? '🚀 요청' : '▶ 전송'}
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       </div>
